@@ -14,6 +14,10 @@ from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from sklearn.feature_extraction.text import TfidfVectorizer
 import string
+import textstat
+import networkx as nx
+import matplotlib.pyplot as plt
+from collections import Counter
 
 class NLPApp(App):
     def build(self):
@@ -44,7 +48,9 @@ class NLPApp(App):
         self.analysis_type = Spinner(
             text='Select Analysis Type',
             values=('Basic Analysis', 'Sentiment Analysis', 'Keyword Extraction', 
-                   'Text Summary', 'Language Detection', 'Text Similarity'),
+                   'Text Summary', 'Language Detection', 'Text Similarity',
+                   'Text Statistics', 'Readability Analysis', 'Entity Relations',
+                   'Text Classification'),
             size_hint_y=0.1
         )
         
@@ -112,6 +118,14 @@ class NLPApp(App):
             self.language_detection(text)
         elif analysis_type == 'Text Similarity':
             self.text_similarity(text)
+        elif analysis_type == 'Text Statistics':
+            self.text_statistics(text)
+        elif analysis_type == 'Readability Analysis':
+            self.readability_analysis(text)
+        elif analysis_type == 'Entity Relations':
+            self.entity_relations(text)
+        elif analysis_type == 'Text Classification':
+            self.text_classification(text)
     
     def basic_analysis(self, text):
         # 使用 spaCy 进行文本分析
@@ -270,6 +284,140 @@ class NLPApp(App):
         results.append(text)
         results.append("\nText 2:")
         results.append(self.second_input.text)
+        
+        self.output_text.text = '\n'.join(results)
+    
+    def text_statistics(self, text):
+        # 基本统计信息
+        words = word_tokenize(text)
+        sentences = nltk.sent_tokenize(text)
+        
+        # 计算各种统计指标
+        stats = {
+            'Characters': len(text),
+            'Words': len(words),
+            'Sentences': len(sentences),
+            'Average Word Length': sum(len(word) for word in words) / len(words),
+            'Average Sentence Length': len(words) / len(sentences),
+            'Unique Words': len(set(words)),
+            'Vocabulary Richness': len(set(words)) / len(words)
+        }
+        
+        # 词性分布
+        doc = self.nlp(text)
+        pos_counts = Counter(token.pos_ for token in doc)
+        
+        results = []
+        results.append("Text Statistics:")
+        results.append("\nBasic Statistics:")
+        for key, value in stats.items():
+            results.append(f"{key}: {value:.2f}")
+        
+        results.append("\nPart of Speech Distribution:")
+        for pos, count in pos_counts.most_common():
+            results.append(f"{pos}: {count}")
+        
+        self.output_text.text = '\n'.join(results)
+    
+    def readability_analysis(self, text):
+        # 计算各种可读性指标
+        readability_scores = {
+            'Flesch Reading Ease': textstat.flesch_reading_ease(text),
+            'Flesch-Kincaid Grade': textstat.flesch_kincaid_grade(text),
+            'Gunning Fog': textstat.gunning_fog(text),
+            'SMOG Index': textstat.smog_index(text),
+            'Automated Readability Index': textstat.automated_readability_index(text),
+            'Coleman-Liau Index': textstat.coleman_liau_index(text),
+            'Linsear Write Formula': textstat.linsear_write_formula(text),
+            'Dale-Chall Readability Score': textstat.dale_chall_readability_score(text)
+        }
+        
+        results = []
+        results.append("Readability Analysis:")
+        results.append("\nReadability Scores:")
+        for metric, score in readability_scores.items():
+            results.append(f"{metric}: {score:.2f}")
+        
+        # 添加解释
+        results.append("\nInterpretation:")
+        results.append("Flesch Reading Ease:")
+        results.append("90-100: Very easy (5th grade)")
+        results.append("80-89: Easy (6th grade)")
+        results.append("70-79: Fairly easy (7th grade)")
+        results.append("60-69: Standard (8th-9th grade)")
+        results.append("50-59: Fairly difficult (10th-12th grade)")
+        results.append("30-49: Difficult (College)")
+        results.append("0-29: Very difficult (College graduate)")
+        
+        self.output_text.text = '\n'.join(results)
+    
+    def entity_relations(self, text):
+        doc = self.nlp(text)
+        
+        # 创建实体关系图
+        G = nx.Graph()
+        entity_pairs = []
+        
+        # 提取实体关系
+        for ent1 in doc.ents:
+            for ent2 in doc.ents:
+                if ent1 != ent2:
+                    # 检查实体是否在同一个句子中
+                    if ent1.sent == ent2.sent:
+                        entity_pairs.append((ent1.text, ent2.text, ent1.label_, ent2.label_))
+                        G.add_edge(ent1.text, ent2.text)
+        
+        results = []
+        results.append("Entity Relations Analysis:")
+        
+        # 显示实体关系
+        results.append("\nEntity Pairs in Same Sentences:")
+        for ent1, ent2, type1, type2 in entity_pairs:
+            results.append(f"{ent1} ({type1}) <-> {ent2} ({type2})")
+        
+        # 显示实体关系网络统计
+        if G.nodes():
+            results.append("\nEntity Network Statistics:")
+            results.append(f"Number of Entities: {len(G.nodes())}")
+            results.append(f"Number of Relations: {len(G.edges())}")
+            results.append(f"Average Degree: {sum(dict(G.degree()).values()) / len(G.nodes()):.2f}")
+        
+        self.output_text.text = '\n'.join(results)
+    
+    def text_classification(self, text):
+        # 简单的文本分类（基于关键词）
+        categories = {
+            'Technology': ['computer', 'software', 'hardware', 'internet', 'digital', 'data', 'system'],
+            'Business': ['business', 'market', 'company', 'finance', 'investment', 'stock', 'trade'],
+            'Science': ['science', 'research', 'experiment', 'study', 'scientific', 'discovery'],
+            'Health': ['health', 'medical', 'disease', 'treatment', 'patient', 'doctor', 'hospital'],
+            'Education': ['education', 'school', 'student', 'teacher', 'learn', 'study', 'class']
+        }
+        
+        # 计算每个类别的得分
+        scores = {}
+        words = set(word_tokenize(text.lower()))
+        
+        for category, keywords in categories.items():
+            score = sum(1 for keyword in keywords if keyword in words)
+            scores[category] = score
+        
+        # 获取最高分的类别
+        max_score = max(scores.values())
+        if max_score > 0:
+            predicted_categories = [cat for cat, score in scores.items() if score == max_score]
+        else:
+            predicted_categories = ['Unknown']
+        
+        results = []
+        results.append("Text Classification:")
+        results.append("\nPredicted Categories:")
+        for category in predicted_categories:
+            results.append(f"- {category}")
+        
+        results.append("\nCategory Scores:")
+        for category, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+            results.append(f"{category}: {score}")
         
         self.output_text.text = '\n'.join(results)
 
